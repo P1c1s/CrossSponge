@@ -1,4 +1,8 @@
-Struct[key_List, iv_List] := Partition[Join[key, iv], Sqrt[Length[Join[key,iv]]]]
+Struct[key_List, iv_List] := Partition[Join[key, iv], Sqrt[Length[Join[key,iv]]]];
+
+StringToBits[str_String] := Flatten[IntegerDigits[ToCharacterCode[str], 2, 8]];
+
+BitsToString[bits_List] := FromCharacterCode[FromDigits[#, 2] & /@ Partition[bits, 8]];
 
 SubstitutionLayer[state_List] := Module[
   {len, half, qTL, qTR, qBL, qBR, nTL, nTR, nBL, nBR},
@@ -23,19 +27,25 @@ SubstitutionLayer[state_List] := Module[
 ]
 
 DiffiusionLayer[state_List] := Module[
-    {row1, row2, row3, row4, len},
+    {row1, row2, row3, row4, col1, col2, col3, col4, len},
     
-    row1 = state[[1]];
-    row2 = state[[2]];
-    row3 = state[[3]];
-    row4 = state[[4]];
     len = Length[state];
+    {row1, row2, row3, row4} = state;
 
-    {RotateLeft[row1, len / 2], 
-     RotateLeft[row2, len / 2],
-     RotateLeft[row3, len / 2],
-     RotateLeft[row4, len / 2]
+    (* Rotazioni orizzoantali *)
+    row1 = RotateLeft[row1, 1]; 
+    row2 = RotateLeft[row2, 2];
+    row3 = RotateLeft[row3, 3];
+    row4 = RotateLeft[row4, 4];
+
+    (* Rotazioni verticali *)
+    {col1, col2, col3, col4} = Transpose[{row1, row2, row3, row4}];  
+    {RotateLeft[col1, len / 2], 
+     RotateLeft[col2, len / 2],
+     RotateLeft[col3, len / 2],
+     RotateLeft[col4, len / 2]
     }
+
 ];
 
 StateMask[state_List] := Module[
@@ -68,8 +78,42 @@ WordMask[word_List] := Module[
 
 CipherMask[state_List] := {state[[1,1]], state[[1,3]], state[[2,2]], state[[2,4]], state[[3,1]], state[[3,3]], state[[4,2]], state[[4,4]]};
 
-Sponge[state_List, word_List] := Mod[StateMask[state] + WordMask[word] + state, 2]
+SpongeAbsorption[state_List, word_List] := PolynomialMod[WordMask[word] + state, 2]
 
 CrossRound[state_List] := DiffiusionLayer[SubstitutionLayer[state]];
 
 CrossSpongeWarmUp[key_List, iv_List, nRound_Integer] := Nest[CrossRound[#] &, Struct[key, iv], nRound];
+
+CrossSpongeEnc[key_List, iv_List, nRound_Integer, word_List] := Module[
+  {initState, absorbedState, cipherBits, nextState},
+  initState = CrossSpongeWarmUp[key, iv, nRound];
+  absorbedState = SpongeAbsorption[initState, word];
+  cipherBits = CipherMask[absorbedState];
+  nextState = CrossRound[absorbedState];
+  cipherBits
+];
+
+CrossSpongeEncString[key_List, iv_List, nWarmRounds_Integer, str_String] := Module[
+  {
+    blocks = Partition[StringToBits[str], 8], (* Divide la stringa in blocchi da 8 bit *)
+    state = CrossSpongeWarmUp[key, iv, nWarmRounds],
+    absorbedState,
+    cipherBlocks = {}
+  },
+  
+  Do[
+    (* 1. Assorbimento del blocco corrente *)
+    absorbedState = SpongeAbsorption[state, block];
+    
+    (* 2. Estrazione degli 8 bit cifrati *)
+    AppendTo[cipherBlocks, CipherMask[absorbedState]];
+    
+    (* 3. Permutazione per preparare lo stato al blocco successivo *)
+    state = CrossRound[absorbedState];
+    
+  , {block, blocks}];
+  
+  (* Restituisce la lista di tutti i bit cifrati *)
+  Flatten[cipherBlocks]
+]
+

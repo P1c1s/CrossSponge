@@ -25,6 +25,5 @@ sponge = Sponge[state, word];
 
 
 Print["Cifrato"]
-CipherMask[sponge]
 
-
+CrossSpongeEncString[key, iv, 1, "testo a caso"]
