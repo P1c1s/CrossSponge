@@ -35,7 +35,7 @@ DiffiusionLayer[state_List] := Module[
   
   (* Rotazioni verticali *)
   cols = Transpose[shiftedRows];
-  MapIndexed[RotateRight[#1, Mod[#2[[1]] + n/2, n] + 1] &, cols]
+  MapIndexed[RotateRight[#1, #2[[1]]] &, cols]
 ];
 
 CrossRound[state_List, round_Integer: 1] := Module[{n = Length[state]},
